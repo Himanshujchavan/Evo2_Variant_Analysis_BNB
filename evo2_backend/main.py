@@ -4,6 +4,7 @@ import modal
 from evo2.genome_utils import get_genome_sequence
 from evo2.analyzer import analyze_variant
 from evo2.constants import WINDOW_SIZE
+from typing import List
 
 evo2_image = (
     modal.Image.from_registry(
@@ -73,6 +74,32 @@ class Evo2Model:
 
         result["position"] = variant_position
         return result
+
+    @modal.fastapi_endpoint(method="POST")
+    def analyze_batch_variants(self, variants: List[dict], genome: str, chromosome: str):
+        """
+        variants: List of dicts with keys 'variant_position' and 'alternative'
+        """
+        results = []
+        for v in variants:
+            window_seq, seq_start = get_genome_sequence(
+                position=v["variant_position"],
+                genome=genome,
+                chromosome=chromosome,
+                window_size=WINDOW_SIZE
+            )
+            relative_pos = v["variant_position"] - 1 - seq_start
+            reference = window_seq[relative_pos]
+            result = analyze_variant(
+                relative_pos_in_window=relative_pos,
+                reference=reference,
+                alternative=v["alternative"],
+                window_seq=window_seq,
+                model=self.model
+            )
+            result["position"] = v["variant_position"]
+            results.append(result)
+        return results
 
 @app.local_entrypoint()
 def main():
